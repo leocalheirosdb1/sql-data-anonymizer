@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "+NwCtU8c91fz0TGzMYuCMiCKcWluROaPz8JjfBVuBpg=",
+  "Source": "SqlDataAnonymizer.Api",
+  "BasePath": "_content/SqlDataAnonymizer.Api",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}

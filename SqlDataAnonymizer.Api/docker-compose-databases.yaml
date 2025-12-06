@@ -1,0 +1,97 @@
+﻿version: '3.8'
+
+services:
+  # ==========================================
+  # SQL SERVER
+  # ==========================================
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver-anonymizer
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=SqlServer@2024
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    networks:
+      - anonymizer-network
+
+  # ==========================================
+  # MYSQL
+  # ==========================================
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-anonymizer
+    environment:
+      - MYSQL_ROOT_PASSWORD=MySql@2024
+      - MYSQL_DATABASE=TestDB
+      - MYSQL_USER=testuser
+      - MYSQL_PASSWORD=TestUser@2024
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./scripts/mysql:/docker-entrypoint-initdb.d
+    networks:
+      - anonymizer-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pMySql@2024"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    command: --default-authentication-plugin=mysql_native_password
+
+  # ==========================================
+  # ORACLE XE
+  # ==========================================
+  oracle:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: oracle-anonymizer
+    environment:
+      - ORACLE_PASSWORD=Oracle@2024
+      - ORACLE_DATABASE=TESTDB
+      - APP_USER=testuser
+      - APP_USER_PASSWORD=TestUser@2024
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./scripts/oracle:/docker-entrypoint-initdb.d
+    networks:
+      - anonymizer-network
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ==========================================
+  # ADMINER
+  # ==========================================
+  adminer:
+    image: adminer:latest
+    container_name: adminer-anonymizer
+    ports:
+      - "8080:8080"
+    networks:
+      - anonymizer-network
+    depends_on:
+      - sqlserver
+      - mysql
+      - oracle
+
+# ==========================================
+# NETWORKS & VOLUMES
+# ==========================================
+networks:
+  anonymizer-network:
+    driver: bridge
+
+volumes:
+  sqlserver-data:
+  mysql-data:
+  oracle-data:

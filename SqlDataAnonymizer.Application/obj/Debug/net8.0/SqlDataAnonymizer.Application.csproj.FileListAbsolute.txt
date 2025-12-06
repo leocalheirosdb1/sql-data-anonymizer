@@ -1,0 +1,17 @@
+C:\SIG\pdi\SqlDataAnonymizer\SqlDataAnonymizer.Application\bin\Debug\net8.0\SqlDataAnonymizer.Application.deps.json
+C:\SIG\pdi\SqlDataAnonymizer\SqlDataAnonymizer.Application\bin\Debug\net8.0\SqlDataAnonymizer.Application.dll
+C:\SIG\pdi\SqlDataAnonymizer\SqlDataAnonymizer.Application\bin\Debug\net8.0\SqlDataAnonymizer.Application.pdb
+C:\SIG\pdi\SqlDataAnonymizer\SqlDataAnonymizer.Application\bin\Debug\net8.0\SqlDataAnonymizer.Domain.dll
+C:\SIG\pdi\SqlDataAnonymizer\SqlDataAnonymizer.Application\bin\Debug\net8.0\SqlDataAnonymizer.Infrastructure.dll
+C:\SIG\pdi\SqlDataAnonymizer\SqlDataAnonymizer.Application\bin\Debug\net8.0\SqlDataAnonymizer.Domain.pdb
+C:\SIG\pdi\SqlDataAnonymizer\SqlDataAnonymizer.Application\bin\Debug\net8.0\SqlDataAnonymizer.Infrastructure.pdb
+C:\SIG\pdi\SqlDataAnonymizer\SqlDataAnonymizer.Application\obj\Debug\net8.0\SqlDataAnonymizer.Application.csproj.AssemblyReference.cache
+C:\SIG\pdi\SqlDataAnonymizer\SqlDataAnonymizer.Application\obj\Debug\net8.0\SqlDataAnonymizer.Application.GeneratedMSBuildEditorConfig.editorconfig
+C:\SIG\pdi\SqlDataAnonymizer\SqlDataAnonymizer.Application\obj\Debug\net8.0\SqlDataAnonymizer.Application.AssemblyInfoInputs.cache
+C:\SIG\pdi\SqlDataAnonymizer\SqlDataAnonymizer.Application\obj\Debug\net8.0\SqlDataAnonymizer.Application.AssemblyInfo.cs
+C:\SIG\pdi\SqlDataAnonymizer\SqlDataAnonymizer.Application\obj\Debug\net8.0\SqlDataAnonymizer.Application.csproj.CoreCompileInputs.cache
+C:\SIG\pdi\SqlDataAnonymizer\SqlDataAnonymizer.Application\obj\Debug\net8.0\SqlDataA.A706A052.Up2Date
+C:\SIG\pdi\SqlDataAnonymizer\SqlDataAnonymizer.Application\obj\Debug\net8.0\SqlDataAnonymizer.Application.dll
+C:\SIG\pdi\SqlDataAnonymizer\SqlDataAnonymizer.Application\obj\Debug\net8.0\refint\SqlDataAnonymizer.Application.dll
+C:\SIG\pdi\SqlDataAnonymizer\SqlDataAnonymizer.Application\obj\Debug\net8.0\SqlDataAnonymizer.Application.pdb
+C:\SIG\pdi\SqlDataAnonymizer\SqlDataAnonymizer.Application\obj\Debug\net8.0\ref\SqlDataAnonymizer.Application.dll
