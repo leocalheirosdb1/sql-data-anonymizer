@@ -3,5 +3,5 @@
 public interface IAnonymizationStrategy
 {
     string Type { get; }
-    string Anonymize(string value);
+    string Anonymize();
 }

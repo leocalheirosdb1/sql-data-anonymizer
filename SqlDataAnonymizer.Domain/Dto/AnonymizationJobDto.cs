@@ -1,4 +1,5 @@
 ﻿using SqlDataAnonymizer.Domain.Enums;
+using System.Collections.Concurrent;
 
 namespace SqlDataAnonymizer.Domain.DTO;
 
@@ -11,6 +12,6 @@ public class AnonymizationJobDto
     public string Status { get; set; } = "Queued";
     public DateTime StartedAt { get; set; }
     public DateTime?  CompletedAt { get; set; }
-    public List<string> Logs { get; set; } = new();
+    public ConcurrentBag<string> Logs { get; set; } = new();
     public string?  ErrorMessage { get; set; }
 }

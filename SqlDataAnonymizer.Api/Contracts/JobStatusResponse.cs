@@ -38,15 +38,15 @@ public sealed record JobStatusResponse
     /// <summary>
     /// Data/hora de conclusão
     /// </summary>
-    public DateTime?  CompletedAt { get; init; }
-
+    public DateTime? CompletedAt { get; init; }
+    
     /// <summary>
     /// Logs do processamento (últimos 50)
     /// </summary>
     public List<string> Logs { get; init; } = new();
-
+    
     /// <summary>
     /// Mensagem de erro (se houver)
     /// </summary>
-    public string?  ErrorMessage { get; init; }
+    public string? ErrorMessage { get; init; }
 }

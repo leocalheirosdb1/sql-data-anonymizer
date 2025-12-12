@@ -2,6 +2,7 @@
 using SqlDataAnonymizer.Api.Contracts;
 using SqlDataAnonymizer.Application.Services;
 using SqlDataAnonymizer.Domain.Enums;
+using SqlDataAnonymizer.Domain.Interfaces;
 
 namespace SqlDataAnonymizer.Api.Controllers;
 
@@ -10,7 +11,7 @@ namespace SqlDataAnonymizer.Api.Controllers;
 [Produces("application/json")]
 public sealed class AnonymizationController : ControllerBase
 {
-    private readonly AnonymizationService _service;
+    private readonly IAnonymizationService _service;
     private readonly ILogger<AnonymizationController> _logger;
 
     public AnonymizationController(
@@ -38,7 +39,7 @@ public sealed class AnonymizationController : ControllerBase
             _logger.LogInformation("Requisição de anonimização recebida - Servidor: {Server}, Banco: {Database}, Tipo: {Type}", 
                 request. Servidor, request.Banco, request.TipoBanco);
 
-            if (! Enum.TryParse<DatabaseType>(request.TipoBanco, true, out var dbType))
+            if (!Enum.TryParse<DatabaseType>(request.TipoBanco, true, out var dbType))
             {
                 _logger.LogWarning("Tipo de banco inválido: {Type}", request.TipoBanco);
                 return BadRequest(new ErrorResponse
@@ -108,35 +109,19 @@ public sealed class AnonymizationController : ControllerBase
         var response = new JobStatusResponse
         {
             JobId = job.JobId,
-            Status = job. Status,
-            DatabaseType = job.DatabaseType. ToString(),
-            Server = job. Server,
-            Database = job. Database,
+            Status = job.Status,
+            DatabaseType = job.DatabaseType.ToString(),
+            Server = job.Server,
+            Database = job.Database,
             StartedAt = job.StartedAt,
             CompletedAt = job.CompletedAt,
-            Logs = job.Logs. TakeLast(50). ToList(),
+            Logs = job.Logs.TakeLast(50).ToList(),
             ErrorMessage = job.ErrorMessage
         };
 
         return Ok(response);
     }
-
-    /// <summary>
-    /// Lista todos os jobs de anonimização
-    /// </summary>
-    /// <returns>Lista de todos os jobs</returns>
-    /// <response code="200">Lista de jobs</response>
-    [HttpGet("jobs")]
-    [ProducesResponseType(typeof(List<JobSummaryResponse>), StatusCodes.Status200OK)]
-    public IActionResult GetAllJobs()
-    {
-        _logger.LogDebug("Listando todos os jobs");
-
-        // Aqui você precisaria adicionar um método GetAllJobs no service
-        // Por enquanto, retornamos uma lista vazia
-        return Ok(new List<JobSummaryResponse>());
-    }
-
+    
     /// <summary>
     /// Health check da API
     /// </summary>

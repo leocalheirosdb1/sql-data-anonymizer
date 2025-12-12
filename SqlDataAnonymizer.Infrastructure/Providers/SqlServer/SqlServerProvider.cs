@@ -1,4 +1,4 @@
-﻿using System.Data;
+﻿using System.Data.Common;
 using System.Text;
 using Microsoft.Data.SqlClient;
 using SqlDataAnonymizer.Domain.DTO;
@@ -11,7 +11,7 @@ public sealed class SqlServerProvider : BaseDatabaseProvider
 {
     public override DatabaseType Type => DatabaseType.SqlServer;
 
-    public override IDbConnection CreateConnection(string connectionString)
+    protected override DbConnection CreateDbConnection(string connectionString)
     {
         return new SqlConnection(connectionString);
     }
@@ -22,22 +22,22 @@ public sealed class SqlServerProvider : BaseDatabaseProvider
             SELECT 
                 t.TABLE_SCHEMA as [Schema],
                 t.TABLE_NAME as TableName,
-                c. COLUMN_NAME as ColumnName,
+                c.COLUMN_NAME as ColumnName,
                 c.DATA_TYPE as DataType,
                 CASE
-                    WHEN c. COLUMN_NAME LIKE '%EMAIL%' THEN 'email'
-                    WHEN c. COLUMN_NAME LIKE '%CPF%' THEN 'cpf'
-                    WHEN c.COLUMN_NAME LIKE '%TELEFONE%' OR c.COLUMN_NAME LIKE '%PHONE%' THEN 'telefone'
+                    WHEN c.COLUMN_NAME LIKE '%EMAIL%' THEN 'email'
+                    WHEN c.COLUMN_NAME LIKE '%CPF%' THEN 'cpf'
+                    WHEN c.COLUMN_NAME LIKE '%TELEFONE%' THEN 'telefone'
                     ELSE 'desconhecido'
                 END AS SensitiveType
             FROM INFORMATION_SCHEMA.TABLES t
-            INNER JOIN INFORMATION_SCHEMA. COLUMNS c 
+            INNER JOIN INFORMATION_SCHEMA.COLUMNS c 
                 ON t.TABLE_NAME = c.TABLE_NAME 
-                AND t.TABLE_SCHEMA = c. TABLE_SCHEMA
+                AND t.TABLE_SCHEMA = c.TABLE_SCHEMA
             WHERE t.TABLE_TYPE = 'BASE TABLE'
                 AND (
-                    c. COLUMN_NAME LIKE '%EMAIL%' 
-                    OR c. COLUMN_NAME LIKE '%CPF%'
+                    c.COLUMN_NAME LIKE '%EMAIL%' 
+                    OR c.COLUMN_NAME LIKE '%CPF%'
                     OR c.COLUMN_NAME LIKE '%TELEFONE%'
                 )
             ORDER BY t.TABLE_NAME, c.COLUMN_NAME";
@@ -58,15 +58,46 @@ public sealed class SqlServerProvider : BaseDatabaseProvider
     {
         return $"SELECT COUNT(*) FROM {column.FullTableName()}";
     }
+    
+    public override string BuildSelectQuery(
+        SensitiveColumnDto column,
+        List<string> primaryKeys,
+        int offset,
+        int batchSize)
+    {
+        var pkColumns = string.Join(", ", primaryKeys.Select(pk => QuoteIdentifier(pk)));
+        var columnQuoted = QuoteIdentifier(column.ColumnName);
+        var pkOrderBy = string.Join(", ", primaryKeys.Select(pk => QuoteIdentifier(pk)));
+
+        return $"SELECT {pkColumns}, {columnQuoted} " +
+               $"FROM {column.FullTableName()} " +
+               $"ORDER BY {pkOrderBy} " +
+               $"OFFSET {offset} ROWS FETCH NEXT {batchSize} ROWS ONLY";
+    }
+    
+    public override string BuildSelectWithTempColumnQuery(
+        SensitiveColumnDto column,
+        string tempColumnName,
+        long offset,
+        int batchSize)
+    {
+        var tempColQuoted = QuoteIdentifier(tempColumnName);
+        var columnQuoted = QuoteIdentifier(column.ColumnName);
+
+        return $"SELECT {tempColQuoted}, {columnQuoted} " +
+               $"FROM {column.FullTableName()} " +
+               $"WHERE {tempColQuoted} BETWEEN {offset} AND {offset + batchSize - 1} " +
+               $"AND {columnQuoted} IS NOT NULL";
+    }
 
     public override string BuildBulkUpdateQuery(
         SensitiveColumnDto column,
         List<string> primaryKeys,
-        List<Dictionary<string, object>> records,
+        List<IDictionary<string, object>> records,
         Dictionary<string, string> anonymizedValues)
     {
         var sb = new StringBuilder();
-        sb. AppendLine($"UPDATE {column.FullTableName()}");
+        sb.AppendLine($"UPDATE {column.FullTableName()}");
         sb.AppendLine($"SET [{column.ColumnName}] = CASE");
 
         var hasValidRecords = false;
@@ -78,7 +109,7 @@ public sealed class SqlServerProvider : BaseDatabaseProvider
             if (string.IsNullOrWhiteSpace(originalValue))
                 continue;
 
-            if (! anonymizedValues.TryGetValue(originalValue, out var anonymizedValue))
+            if (!anonymizedValues.TryGetValue(originalValue, out var anonymizedValue))
                 continue;
 
             hasValidRecords = true;
@@ -91,12 +122,12 @@ public sealed class SqlServerProvider : BaseDatabaseProvider
             sb.AppendLine($"    WHEN {whenClause} THEN '{EscapeString(anonymizedValue)}'");
 
             var pkConditions = primaryKeys
-                .Select(pk => $"[{pk}] = '{EscapeString(record[pk]?.ToString() ??  "")}'")
+                .Select(pk => $"[{pk}] = '{EscapeString(record[pk]?.ToString() ?? "")}'")
                 .ToList();
             whereConditions.Add($"({string.Join(" AND ", pkConditions)})");
         }
 
-        if (! hasValidRecords)
+        if (!hasValidRecords)
             return string.Empty;
 
         sb.AppendLine($"    ELSE [{column.ColumnName}]");
@@ -119,11 +150,11 @@ public sealed class SqlServerProvider : BaseDatabaseProvider
     public override string BuildBulkUpdateWithTempColumnQuery(
         SensitiveColumnDto column,
         string tempColumnName,
-        List<Dictionary<string, object>> records,
+        List<IDictionary<string, object>> records,
         Dictionary<string, string> anonymizedValues)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"UPDATE {column. FullTableName()}");
+        sb.AppendLine($"UPDATE {column.FullTableName()}");
         sb.AppendLine($"SET [{column.ColumnName}] = CASE");
 
         var hasValidRecords = false;
@@ -131,24 +162,24 @@ public sealed class SqlServerProvider : BaseDatabaseProvider
 
         foreach (var record in records)
         {
-            var rowNum = record[tempColumnName].ToString();
-            var originalValue = record[column. ColumnName].ToString();
+            var rowNum = record[tempColumnName]?.ToString();
+            var originalValue = record[column.ColumnName]?.ToString();
 
             if (string.IsNullOrWhiteSpace(originalValue))
                 continue;
 
-            if (! anonymizedValues.TryGetValue(originalValue, out var anonymizedValue))
+            if (!anonymizedValues.TryGetValue(originalValue, out var anonymizedValue))
                 continue;
 
             hasValidRecords = true;
             sb.AppendLine($"    WHEN [{tempColumnName}] = {rowNum} THEN '{EscapeString(anonymizedValue)}'");
-            rowNumbers.Add(rowNum! );
+            rowNumbers.Add(rowNum!);
         }
 
-        if (! hasValidRecords)
+        if (!hasValidRecords)
             return string.Empty;
 
-        sb. AppendLine($"    ELSE [{column.ColumnName}]");
+        sb.AppendLine($"    ELSE [{column.ColumnName}]");
         sb.AppendLine("END");
         sb.AppendLine($"WHERE [{tempColumnName}] IN ({string.Join(", ", rowNumbers)})");
 

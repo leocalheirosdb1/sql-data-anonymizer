@@ -19,8 +19,8 @@ public sealed class SensitiveColumnRepository : ISensitiveColumnRepository
         IDatabaseProvider provider)
     {
         _logger.LogInformation("Iniciando detecção de colunas sensíveis usando {Provider}", provider.Type);
-        
-        using var connection = provider.CreateConnection(connectionString);
+
+        await using var connection = provider.CreateConnection(connectionString);
         var query = provider.GetSensitiveColumnsQuery();
         var results = await connection.QueryAsync<SensitiveColumnDto>(query);
         

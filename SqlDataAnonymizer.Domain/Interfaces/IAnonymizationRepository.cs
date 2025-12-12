@@ -8,6 +8,6 @@ public interface IAnonymizationRepository
         string connectionString,
         IDatabaseProvider provider,
         SensitiveColumnDto column,
-        Func<string, string> anonymizer,
+        IAnonymizationStrategy strategy,
         Action<string> logCallback);
 }

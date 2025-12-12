@@ -1,4 +1,4 @@
-﻿using System.Data;
+﻿using System.Data.Common;
 using System.Text;
 using MySqlConnector;
 using SqlDataAnonymizer.Domain.DTO;
@@ -11,7 +11,7 @@ public sealed class MySqlProvider : BaseDatabaseProvider
 {
     public override DatabaseType Type => DatabaseType.MySql;
 
-    public override IDbConnection CreateConnection(string connectionString)
+    protected override DbConnection CreateDbConnection(string connectionString)
     {
         return new MySqlConnection(connectionString);
     }
@@ -25,31 +25,21 @@ public sealed class MySqlProvider : BaseDatabaseProvider
                 c.COLUMN_NAME as ColumnName,
                 c.DATA_TYPE as DataType,
                 CASE
-                    WHEN c. COLUMN_NAME LIKE '%EMAIL%' OR c.COLUMN_NAME LIKE '%CARTA%' THEN 'email'
-                    WHEN c.COLUMN_NAME LIKE '%CPF%' OR c. COLUMN_NAME LIKE '%DOCUMENTO%' THEN 'cpf'
-                    WHEN c.COLUMN_NAME LIKE '%TELEFONE%' OR c. COLUMN_NAME LIKE '%PHONE%' OR c.COLUMN_NAME LIKE '%FONE%' THEN 'telefone'
-                    WHEN c. COLUMN_NAME LIKE '%NOME%' OR c.COLUMN_NAME LIKE '%NAME%' THEN 'nome'
-                    WHEN c.COLUMN_NAME LIKE '%ENDERECO%' OR c.COLUMN_NAME LIKE '%ADDRESS%' THEN 'endereco'
+                    WHEN c.COLUMN_NAME LIKE '%EMAIL%' THEN 'email'
+                    WHEN c.COLUMN_NAME LIKE '%CPF%' THEN 'cpf'
+                    WHEN c.COLUMN_NAME LIKE '%TELEFONE%' THEN 'telefone'
                     ELSE 'desconhecido'
                 END AS SensitiveType
             FROM INFORMATION_SCHEMA.TABLES t
-            INNER JOIN INFORMATION_SCHEMA. COLUMNS c 
+            INNER JOIN INFORMATION_SCHEMA.COLUMNS c 
                 ON t.TABLE_NAME = c.TABLE_NAME 
-                AND t.TABLE_SCHEMA = c. TABLE_SCHEMA
+                AND t.TABLE_SCHEMA = c.TABLE_SCHEMA
             WHERE t.TABLE_TYPE = 'BASE TABLE'
                 AND t.TABLE_SCHEMA NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys')
                 AND (
                     c.COLUMN_NAME LIKE '%EMAIL%' 
-                    OR c. COLUMN_NAME LIKE '%CARTA%'
                     OR c.COLUMN_NAME LIKE '%CPF%'
-                    OR c. COLUMN_NAME LIKE '%DOCUMENTO%'
-                    OR c. COLUMN_NAME LIKE '%TELEFONE%'
-                    OR c.COLUMN_NAME LIKE '%PHONE%'
-                    OR c.COLUMN_NAME LIKE '%FONE%'
-                    OR c.COLUMN_NAME LIKE '%NOME%'
-                    OR c.COLUMN_NAME LIKE '%NAME%'
-                    OR c.COLUMN_NAME LIKE '%ENDERECO%'
-                    OR c. COLUMN_NAME LIKE '%ADDRESS%'
+                    OR c.COLUMN_NAME LIKE '%TELEFONE%'
                 )
             ORDER BY t.TABLE_NAME, c.COLUMN_NAME";
     }
@@ -69,11 +59,42 @@ public sealed class MySqlProvider : BaseDatabaseProvider
     {
         return $"SELECT COUNT(*) FROM {column.FullTableName("`")}";
     }
+    
+    public override string BuildSelectQuery(
+        SensitiveColumnDto column,
+        List<string> primaryKeys,
+        int offset,
+        int batchSize)
+    {
+        var pkColumns = string.Join(", ", primaryKeys.Select(pk => QuoteIdentifier(pk)));
+        var columnQuoted = QuoteIdentifier(column.ColumnName);
+        var pkOrderBy = string.Join(", ", primaryKeys.Select(pk => QuoteIdentifier(pk)));
+
+        return $"SELECT {pkColumns}, {columnQuoted} " +
+               $"FROM {column.FullTableName("`")} " +
+               $"ORDER BY {pkOrderBy} " +
+               $"LIMIT {batchSize} OFFSET {offset}";
+    }
+    
+    public override string BuildSelectWithTempColumnQuery(
+        SensitiveColumnDto column,
+        string tempColumnName,
+        long offset,
+        int batchSize)
+    {
+        var tempColQuoted = QuoteIdentifier(tempColumnName);
+        var columnQuoted = QuoteIdentifier(column.ColumnName);
+
+        return $"SELECT {tempColQuoted}, {columnQuoted} " +
+               $"FROM {column.FullTableName("`")} " +
+               $"WHERE {tempColQuoted} BETWEEN {offset} AND {offset + batchSize - 1} " +
+               $"AND {columnQuoted} IS NOT NULL";
+    }
 
     public override string BuildBulkUpdateQuery(
         SensitiveColumnDto column,
         List<string> primaryKeys,
-        List<Dictionary<string, object>> records,
+        List<IDictionary<string, object>> records,
         Dictionary<string, string> anonymizedValues)
     {
         var sb = new StringBuilder();
@@ -95,7 +116,7 @@ public sealed class MySqlProvider : BaseDatabaseProvider
             hasValidRecords = true;
 
             var whenConditions = primaryKeys
-                .Select(pk => $"`{pk}` = '{EscapeString(record[pk]?.ToString() ??  "")}'")
+                .Select(pk => $"`{pk}` = '{EscapeString(record[pk]?.ToString() ?? "")}'")
                 .ToList();
 
             var whenClause = string.Join(" AND ", whenConditions);
@@ -108,7 +129,7 @@ public sealed class MySqlProvider : BaseDatabaseProvider
         }
 
         if (!hasValidRecords)
-            return string. Empty;
+            return string.Empty;
 
         sb.AppendLine($"    ELSE `{column.ColumnName}`");
         sb.AppendLine("END");
@@ -119,7 +140,7 @@ public sealed class MySqlProvider : BaseDatabaseProvider
 
     public override string GetAddTempColumnQuery(SensitiveColumnDto column, string tempColumnName)
     {
-        return $"ALTER TABLE {column. FullTableName("`")} ADD `{tempColumnName}` BIGINT AUTO_INCREMENT, ADD INDEX (`{tempColumnName}`)";
+        return $"ALTER TABLE {column.FullTableName("`")} ADD `{tempColumnName}` BIGINT AUTO_INCREMENT, ADD INDEX (`{tempColumnName}`)";
     }
 
     public override string GetDropTempColumnQuery(SensitiveColumnDto column, string tempColumnName)
@@ -130,7 +151,7 @@ public sealed class MySqlProvider : BaseDatabaseProvider
     public override string BuildBulkUpdateWithTempColumnQuery(
         SensitiveColumnDto column,
         string tempColumnName,
-        List<Dictionary<string, object>> records,
+        List<IDictionary<string, object>> records,
         Dictionary<string, string> anonymizedValues)
     {
         var sb = new StringBuilder();
@@ -153,7 +174,7 @@ public sealed class MySqlProvider : BaseDatabaseProvider
 
             hasValidRecords = true;
             sb.AppendLine($"    WHEN `{tempColumnName}` = {rowNum} THEN '{EscapeString(anonymizedValue)}'");
-            rowNumbers. Add(rowNum!);
+            rowNumbers.Add(rowNum!);
         }
 
         if (!hasValidRecords)
@@ -178,6 +199,6 @@ public sealed class MySqlProvider : BaseDatabaseProvider
             .Replace("'", "\\'")
             .Replace("\"", "\\\"")
             .Replace("\n", "\\n")
-            . Replace("\r", "\\r");
+            .Replace("\r", "\\r");
     }
 }
