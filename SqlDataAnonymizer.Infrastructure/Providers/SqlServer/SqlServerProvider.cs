@@ -1,12 +1,12 @@
-﻿using Microsoft.Data.SqlClient;
+﻿using System.Data.Common;
+using System.Text;
+using Microsoft.Data.SqlClient;
 using SqlDataAnonymizer.Domain.DTO;
 using SqlDataAnonymizer.Domain.Enums;
 using SqlDataAnonymizer.Domain.Interfaces;
 using SqlDataAnonymizer.Infrastructure.Common;
-using System.Data.Common;
-using System.Text;
 
-namespace SqlDataAnonymizer.Infrastructure.Database;
+namespace SqlDataAnonymizer.Infrastructure.Providers.SqlServer;
 
 public sealed class SqlServerProvider : BaseDatabaseProvider
 {
