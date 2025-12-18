@@ -15,6 +15,6 @@ public sealed class SensitiveColumnDto
         if (string.IsNullOrEmpty(Schema))
             return $"{quoteChar}{TableName}{closeQuote}";
             
-        return $"{quoteChar}{Schema}{closeQuote}. {quoteChar}{TableName}{closeQuote}";
+        return $"{quoteChar}{Schema}{closeQuote}.{quoteChar}{TableName}{closeQuote}";
     }
 }

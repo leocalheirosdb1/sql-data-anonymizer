@@ -1,8 +1,5 @@
 ﻿namespace SqlDataAnonymizer.Api.Contracts;
 
-/// <summary>
-/// Resumo de um job (para listagem)
-/// </summary>
 public sealed record JobSummaryResponse
 {
     public Guid JobId { get; init; }

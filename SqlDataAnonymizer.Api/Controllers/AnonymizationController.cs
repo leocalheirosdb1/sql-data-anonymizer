@@ -45,7 +45,7 @@ public sealed class AnonymizationController : ControllerBase
                 return BadRequest(new ErrorResponse
                 {
                     Error = $"Tipo de banco '{request.TipoBanco}' não suportado",
-                    SupportedTypes = new[] { "SqlServer", "Oracle", "MySql", "PostgreSql" }
+                    SupportedTypes = new[] { nameof(DatabaseType.SqlServer), nameof(DatabaseType.Oracle), nameof(DatabaseType.MySql) }
                 });
             }
 
@@ -59,7 +59,7 @@ public sealed class AnonymizationController : ControllerBase
                 JobId = jobId,
                 Status = "Processing",
                 Message = $"Anonimização iniciada com sucesso no {dbType}",
-                DatabaseType = dbType. ToString(),
+                DatabaseType = dbType.ToString(),
                 Server = request.Servidor,
                 Database = request.Banco
             };
@@ -136,7 +136,7 @@ public sealed class AnonymizationController : ControllerBase
             Status = "Healthy",
             Timestamp = DateTime.UtcNow,
             Version = "1.0.0",
-            SupportedDatabases = new[] { "SqlServer", "Oracle", "MySql", "PostgreSql" }
+            SupportedDatabases = new[] { nameof(DatabaseType.SqlServer), nameof(DatabaseType.Oracle), nameof(DatabaseType.MySql) }
         });
     }
 }

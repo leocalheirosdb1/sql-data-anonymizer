@@ -1,8 +1,8 @@
 ﻿using SqlDataAnonymizer.Domain.Enums;
 using SqlDataAnonymizer.Domain.Interfaces;
 using SqlDataAnonymizer.Infrastructure.Database;
-using SqlDataAnonymizer.Infrastructure.Database.Mysql;
-using SqlDataAnonymizer.Infrastructure.Database.Oracle;
+using SqlDataAnonymizer.Infrastructure.Providers.Mysql;
+using SqlDataAnonymizer.Infrastructure.Providers.Oracle;
 
 namespace SqlDataAnonymizer.Infrastructure.Factories;
 
@@ -22,7 +22,7 @@ public sealed class DatabaseProviderFactory
 
     public IDatabaseProvider GetProvider(DatabaseType dbType)
     {
-        if (! _providers.TryGetValue(dbType, out var provider))
+        if (!_providers.TryGetValue(dbType, out var provider))
         {
             throw new NotSupportedException($"Database type {dbType} is not supported");
         }

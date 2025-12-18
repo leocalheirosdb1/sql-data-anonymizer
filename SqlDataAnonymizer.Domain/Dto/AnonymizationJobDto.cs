@@ -12,6 +12,6 @@ public class AnonymizationJobDto
     public string Status { get; set; } = "Queued";
     public DateTime StartedAt { get; set; }
     public DateTime?  CompletedAt { get; set; }
-    public ConcurrentBag<string> Logs { get; set; } = new();
+    public ConcurrentBag<string> Logs { get; set; } = [];
     public string?  ErrorMessage { get; set; }
 }

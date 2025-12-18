@@ -51,7 +51,7 @@ public sealed class AnonymizationRepository : IAnonymizationRepository
         
         if (totalRows == 0)
         {
-            logCallback($"  Tabela {column.FullTableName()} está vazia");
+            logCallback($"Tabela {column.FullTableName()} está vazia");
             return true;
         }
 
@@ -81,8 +81,9 @@ public sealed class AnonymizationRepository : IAnonymizationRepository
     {
         if (!primaryKeys.Any())
         {
-            _logger.LogWarning("Tabela sem chave primária - usando estratégia com coluna temporária");
-            return new TempColumnAnonymizationStrategy(_settings, _logger);
+            const string message = "Tabela sem chave primária - não foi possível realizar a anonimização de forma segura";
+            _logger.LogError(message);
+            throw new InvalidOperationException(message);
         }
 
         if (primaryKeys.Count > 1)
@@ -90,7 +91,7 @@ public sealed class AnonymizationRepository : IAnonymizationRepository
             _logger.LogInformation("Tabela com chave composta ({Count} colunas) - usando estratégia otimizada", primaryKeys.Count);
             return new CompositeKeyAnonymizationStrategy(_settings, _logger);
         }
-
+        
         return new PrimaryKeyAnonymizationStrategy(_settings, _logger);
     }
 }

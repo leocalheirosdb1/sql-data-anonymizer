@@ -1,12 +1,8 @@
 using SqlDataAnonymizer.Domain.DTO;
-using SqlDataAnonymizer.Domain.Interfaces;
 
-namespace SqlDataAnonymizer.Infrastructure.Repositories.Strategies;
+namespace SqlDataAnonymizer.Domain.Interfaces;
 
-/// <summary>
-/// Interface para estratégias de anonimização de tabelas
-/// </summary>
-internal interface ITableAnonymizationStrategy
+public interface ITableAnonymizationStrategy
 {
     Task AnonymizeAsync(
         IDbConnectionWrapper connection,

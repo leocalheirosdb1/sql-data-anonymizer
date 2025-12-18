@@ -1,83 +1,207 @@
-﻿-- ==========================================
--- MYSQL - Criação e População de Dados
--- ==========================================
+﻿-- ============================================
+-- SCRIPT DE TESTE: 100.000 REGISTROS
+-- Banco: MySQL
+-- Dados: CPF, Email, Telefone variados
+-- ============================================
 
-USE TestDB;
+-- 1. Criar tabela de teste
+DROP TABLE IF EXISTS TestAnonymization100k;
 
--- ==========================================
--- TABELA 1: Clientes
--- ==========================================
-DROP TABLE IF EXISTS Clientes;
+CREATE TABLE TestAnonymization100k (
+                                       ID INT AUTO_INCREMENT PRIMARY KEY,
+                                       CPF VARCHAR(14) NOT NULL,
+                                       EMAIL VARCHAR(100) NOT NULL,
+                                       TELEFONE VARCHAR(15) NOT NULL,
+                                       NOME VARCHAR(100) NOT NULL,
+                                       CREATED_AT DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 
-CREATE TABLE Clientes (
-                          ClienteID INT PRIMARY KEY AUTO_INCREMENT,
-                          Nome VARCHAR(100) NOT NULL,
-                          Email VARCHAR(100) NOT NULL,
-                          CPF VARCHAR(14) NOT NULL,
-                          Telefone VARCHAR(20),
-                          DataCadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- 2. Criar procedure para inserir 100k registros
+DELIMITER $$
 
--- Popular Clientes
-INSERT INTO Clientes (Nome, Email, CPF, Telefone) VALUES
-                                                      ('Carolina Vieira', 'carolina.vieira@email.com', '123.987.456-11', '(11) 98111-2222'),
-                                                      ('Leandro Silva', 'leandro.silva@email.com', '234.876.543-22', '(21) 97222-3333'),
-                                                      ('Simone Costa', 'simone.costa@email.com', '345.765.432-33', '(31) 96333-4444'),
-                                                      ('Fábio Santos', 'fabio.santos@email.com', '456.654.321-44', '(41) 95444-5555'),
-                                                      ('Cristina Lima', 'cristina.lima@email.com', '567.543.210-55', '(51) 94555-6666'),
-                                                      ('Marcos Rocha', 'marcos.rocha@email.com', '678.432.109-66', '(61) 93666-7777'),
-                                                      ('Sandra Alves', 'sandra. alves@email.com', '789.321.098-77', '(71) 92777-8888'),
-                                                      ('Alex Pereira', 'alex.pereira@email.com', '890.210.987-88', '(81) 91888-9999'),
-                                                      ('Roberta Martins', 'roberta.martins@email.com', '901.109.876-99', '(91) 90999-0000'),
-                                                      ('Igor Gomes', 'igor.gomes@email.com', '012.098.765-00', '(11) 98000-1111');
+DROP PROCEDURE IF EXISTS InsertTestData100k$$
 
--- ==========================================
--- TABELA 2: Funcionarios
--- ==========================================
-DROP TABLE IF EXISTS Funcionarios;
+CREATE PROCEDURE InsertTestData100k()
+BEGIN
+    DECLARE i INT DEFAULT 1;
+    DECLARE batch_size INT DEFAULT 1000;
+    DECLARE sql_text TEXT;
+    
+    WHILE i <= 100000 DO
+        SET sql_text = 'INSERT INTO TestAnonymization100k (CPF, EMAIL, TELEFONE, NOME) VALUES ';
+        
+        SET @j = 0;
+        WHILE @j < batch_size AND i <= 100000 DO
+            IF @j > 0 THEN
+                SET sql_text = CONCAT(sql_text, ',');
+END IF;
+            
+            SET sql_text = CONCAT(sql_text, '(',
+                '''', LPAD(FLOOR((i % 50000) / 100), 3, '0'), '.', 
+                      LPAD(FLOOR((i % 100)), 3, '0'), '.', 
+                      LPAD(FLOOR((i % 1000) / 10), 3, '0'), '-',
+                      LPAD((i % 100), 2, '0'), ''',',
+                '''usuario', i, '@teste.com.br'',',
+                '''(11) 9', LPAD((i % 30000) + 10000000, 8, '0'), ''',',
+                '''Usuario Teste ', (i % 20000), '''',
+                ')');
+            
+            SET i = i + 1;
+            SET @j = @j + 1;
+END WHILE;
+        
+        SET @sql = sql_text;
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-CREATE TABLE Funcionarios (
-                              FuncionarioID INT PRIMARY KEY AUTO_INCREMENT,
-                              NomeCompleto VARCHAR(100) NOT NULL,
-                              EmailCorporativo VARCHAR(100) NOT NULL,
-                              DocumentoCPF VARCHAR(14) NOT NULL,
-                              TelefoneContato VARCHAR(20),
-                              Endereco VARCHAR(200),
-                              Cargo VARCHAR(50),
-                              Salario DECIMAL(10,2),
-                              DataAdmissao DATE DEFAULT (CURRENT_DATE)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- Log progresso a cada 10k
+IF i % 10000 = 0 THEN
+SELECT CONCAT('Inseridos:  ', i, ' registros') AS Progresso;
+END IF;
+END WHILE;
 
--- Popular Funcionarios
-INSERT INTO Funcionarios (NomeCompleto, EmailCorporativo, DocumentoCPF, TelefoneContato, Endereco, Cargo, Salario) VALUES
-                                                                                                                       ('Monica Oliveira', 'monica.oliveira@empresa.com', '111.999.888-11', '(11) 98765-1111', 'Rua ABC, 100 - Centro, Curitiba - PR', 'Analista', 4800.00),
-                                                                                                                       ('Vinicius Souza', 'vinicius. souza@empresa.com', '222.888.777-22', '(21) 97654-2222', 'Avenida XYZ, 200 - Batel, Curitiba - PR', 'Coordenador', 7000.00),
-                                                                                                                       ('Natália Ferreira', 'natalia.ferreira@empresa.com', '333.777.666-33', '(31) 96543-3333', 'Rua DEF, 300 - Água Verde, Curitiba - PR', 'Desenvolvedora', 5500.00),
-                                                                                                                       ('Leonardo Costa', 'leonardo.costa@empresa.com', '444.666.555-44', '(41) 95432-4444', 'Alameda GHI, 400 - Centro, Porto Alegre - RS', 'Analista', 5200.00),
-                                                                                                                       ('Tatiana Lima', 'tatiana.lima@empresa.com', '555.555.444-55', '(51) 94321-5555', 'Avenida JKL, 500 - Moinhos de Vento, Porto Alegre - RS', 'Gerente', 9000.00);
+SELECT 'Concluído:  100.000 registros inseridos!' AS Status;
+END$$
 
--- ==========================================
--- TABELA 3: Pedidos
--- ==========================================
-DROP TABLE IF EXISTS Pedidos;
+DELIMITER ;
 
-CREATE TABLE Pedidos (
-                         PedidoID INT PRIMARY KEY AUTO_INCREMENT,
-                         ClienteNome VARCHAR(100),
-                         ClienteEmail VARCHAR(100),
-                         ClienteCPF VARCHAR(14),
-                         ClienteTelefone VARCHAR(20),
-                         EnderecoEntrega VARCHAR(200),
-                         ValorTotal DECIMAL(10,2),
-                         DataPedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- 3. Executar procedure
+CALL InsertTestData100k();
 
--- Popular Pedidos
-INSERT INTO Pedidos (ClienteNome, ClienteEmail, ClienteCPF, ClienteTelefone, EnderecoEntrega, ValorTotal) VALUES
-                                                                                                              ('André Martins', 'andre.martins@email.com', '666.444.333-66', '(61) 93210-6666', 'Rua MNO, 600 - Centro, Brasília - DF', 175.00),
-                                                                                                              ('Priscila Santos', 'priscila. santos@email.com', '777.333.222-77', '(71) 92109-7777', 'Avenida PQR, 700 - Asa Sul, Brasília - DF', 290.50),
-                                                                                                              ('Paulo Oliveira', 'paulo. oliveira@email.com', '888.222.111-88', '(81) 91098-8888', 'Rua STU, 800 - Centro, Salvador - BA', 125.75),
-                                                                                                              ('Adriana Costa', 'adriana. costa@email.com', '999.111.000-99', '(91) 90987-9999', 'Alameda VWX, 900 - Barra, Salvador - BA', 450.00),
-                                                                                                              ('Renato Silva', 'renato.silva@email.com', '000.999.888-00', '(11) 98876-0000', 'Travessa YZ, 1000 - Pelourinho, Salvador - BA', 89.00);
+-- 4. Criar índices para performance
+CREATE INDEX IX_TestAnonymization100k_CPF ON TestAnonymization100k(CPF);
+CREATE INDEX IX_TestAnonymization100k_EMAIL ON TestAnonymization100k(EMAIL);
 
-SELECT 'MySQL: Banco TestDB criado e populado com sucesso!' AS Message;
+-- 5. Verificar distribuição
+SELECT 'Total de registros' as Metrica, COUNT(*) as Valor
+FROM TestAnonymization100k
+
+UNION ALL
+
+SELECT 'CPFs únicos', COUNT(DISTINCT CPF)
+FROM TestAnonymization100k
+
+UNION ALL
+
+SELECT 'Emails únicos', COUNT(DISTINCT EMAIL)
+FROM TestAnonymization100k
+
+UNION ALL
+
+SELECT 'Telefones únicos', COUNT(DISTINCT TELEFONE)
+FROM TestAnonymization100k;
+
+-- 6. Exemplo de registros
+SELECT * FROM TestAnonymization100k ORDER BY ID LIMIT 10;
+
+-- 7. Limpar procedure
+DROP PROCEDURE IF EXISTS InsertTestData100k;
+
+
+-- ============================================
+-- SCRIPT DE TESTE: 10.000 REGISTROS
+-- Banco: MySQL
+-- Dados: CPF, Email, Telefone variados
+-- ============================================
+
+-- 1. Criar tabela de teste
+DROP TABLE IF EXISTS TestAnonymization10k;
+
+CREATE TABLE TestAnonymization10k (
+                                      ID INT AUTO_INCREMENT PRIMARY KEY,
+                                      CPF VARCHAR(14) NOT NULL,
+                                      EMAIL VARCHAR(100) NOT NULL,
+                                      TELEFONE VARCHAR(15) NOT NULL,
+                                      NOME VARCHAR(100) NOT NULL,
+                                      CREATED_AT DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Criar procedure para inserir 10k registros
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS InsertTestData10k$$
+
+CREATE PROCEDURE InsertTestData10k()
+BEGIN
+    DECLARE i INT DEFAULT 1;
+    DECLARE batch_size INT DEFAULT 1000;
+    DECLARE sql_text TEXT;
+    
+    WHILE i <= 10000 DO
+        SET sql_text = 'INSERT INTO TestAnonymization10k (CPF, EMAIL, TELEFONE, NOME) VALUES ';
+        
+        SET @j = 0;
+        WHILE @j < batch_size AND i <= 10000 DO
+            IF @j > 0 THEN
+                SET sql_text = CONCAT(sql_text, ',');
+END IF;
+            
+            SET sql_text = CONCAT(sql_text, '(',
+                '''', LPAD(FLOOR((i % 5000) / 100), 3, '0'), '.', 
+                      LPAD(FLOOR((i % 100)), 3, '0'), '.', 
+                      LPAD(FLOOR((i % 1000) / 10), 3, '0'), '-',
+                      LPAD((i % 100), 2, '0'), ''',',
+                '''usuario', i, '@teste.com.br'',',
+                '''(11) 9', LPAD((i % 3000) + 10000000, 8, '0'), ''',',
+                '''Usuario Teste ', (i % 2000), '''',
+                ')');
+            
+            SET i = i + 1;
+            SET @j = @j + 1;
+END WHILE;
+        
+        SET @sql = sql_text;
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+END WHILE;
+
+SELECT 'Concluído:  10.000 registros inseridos!' AS Status;
+END$$
+
+DELIMITER ;
+
+-- 3. Executar procedure
+CALL InsertTestData10k();
+
+-- 4. Criar índices
+CREATE INDEX IX_TestAnonymization10k_CPF ON TestAnonymization10k(CPF);
+CREATE INDEX IX_TestAnonymization10k_EMAIL ON TestAnonymization10k(EMAIL);
+
+-- 5. Verificar distribuição
+SELECT 'Total de registros' as Metrica, COUNT(*) as Valor
+FROM TestAnonymization10k
+
+UNION ALL
+
+SELECT 'CPFs únicos', COUNT(DISTINCT CPF)
+FROM TestAnonymization10k
+
+UNION ALL
+
+SELECT 'Emails únicos', COUNT(DISTINCT EMAIL)
+FROM TestAnonymization10k
+
+UNION ALL
+
+SELECT 'Telefones únicos', COUNT(DISTINCT TELEFONE)
+FROM TestAnonymization10k;
+
+-- 6. Exemplo de registros
+SELECT * FROM TestAnonymization10k ORDER BY ID LIMIT 10;
+
+-- 7. Limpar procedure
+DROP PROCEDURE IF EXISTS InsertTestData10k;
+
+
+-- ============================================
+-- SCRIPT DE LIMPEZA (MySQL)
+-- ============================================
+
+DROP TABLE IF EXISTS TestAnonymization100k;
+DROP TABLE IF EXISTS TestAnonymization10k;
+DROP PROCEDURE IF EXISTS InsertTestData100k;
+DROP PROCEDURE IF EXISTS InsertTestData10k;
+
+SELECT 'Todas as tabelas de teste foram removidas!' AS Status;

@@ -3,9 +3,6 @@ using SqlDataAnonymizer.Domain.Interfaces;
 
 namespace SqlDataAnonymizer.Infrastructure.Database;
 
-/// <summary>
-/// Implementação concreta do wrapper de transação usando DbTransaction do ADO.NET
-/// </summary>
 public sealed class DbTransactionWrapper : IDbTransactionWrapper
 {
     private readonly DbTransaction _transaction;

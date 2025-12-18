@@ -62,12 +62,12 @@ public sealed class AnonymizationService : IAnonymizationService
     {
         try
         {
-            UpdateJobStatus(job, "Processing", $"🚀 Iniciando anonimização no {job.DatabaseType}");
+            UpdateJobStatus(job, "Processing", $"Iniciando anonimização no {job.DatabaseType}");
 
             var connectionString = _connectionStringFactory.Create(job.Server, job.Database, job.DatabaseType);
             var provider = _providerFactory.GetProvider(job.DatabaseType);
 
-            AddLog(job, "🔍 Detectando colunas sensíveis...");
+            AddLog(job, "Detectando colunas sensíveis...");
             var columns = await _columnRepository.GetSensitiveColumnsAsync(connectionString, provider);
 
             if (!columns.Any())
@@ -76,7 +76,7 @@ public sealed class AnonymizationService : IAnonymizationService
                 return;
             }
 
-            AddLog(job, $"✅ Encontradas {columns.Count} colunas sensíveis em {columns.Select(c => c.FullTableName()).Distinct().Count()} tabelas");
+            AddLog(job, $"Encontradas {columns.Count} colunas sensíveis em {columns.Select(c => c.FullTableName()).Distinct().Count()} tabelas");
 
             await ProcessColumnsAsync(job, connectionString, provider, columns);
 
@@ -84,8 +84,8 @@ public sealed class AnonymizationService : IAnonymizationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ Erro ao processar job {JobId}", job.JobId);
-            UpdateJobStatus(job, "Failed", $"❌ Erro: {ex.Message}");
+            _logger.LogError(ex, "Erro ao processar job {JobId}", job.JobId);
+            UpdateJobStatus(job, "Failed", $"Erro: {ex.Message}");
             job.ErrorMessage = ex.Message;
             _jobRepository.Update(job);
         }
@@ -116,13 +116,13 @@ public sealed class AnonymizationService : IAnonymizationService
 
             if (strategy == null)
             {
-                var message = $"⚠️ Nenhuma estratégia encontrada para tipo '{column.SensitiveType}' na coluna {column.FullTableName()}.{column.ColumnName}";
+                var message = $"Nenhuma estratégia encontrada para tipo '{column.SensitiveType}' na coluna {column.FullTableName()}.{column.ColumnName}";
                 AddLog(job, message);
                 _logger.LogWarning(message);
                 continue;
             }
 
-            AddLog(job, $"📊 Processando {column.FullTableName()}.{column.ColumnName} (Tipo: {column.SensitiveType})");
+            AddLog(job, $"Processando {column.FullTableName()}.{column.ColumnName} (Tipo: {column.SensitiveType})");
 
             await _anonymizationRepository.AnonymizeColumnAsync(
                 connectionString,

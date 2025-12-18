@@ -14,11 +14,6 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
 
-if (builder.Environment.IsProduction())
-{
-    builder.Logging.AddEventLog();
-}
-
 var dbSettings = builder.Configuration
     .GetSection("DatabaseSettings")
     .Get<DatabaseSettings>() ?? new DatabaseSettings();

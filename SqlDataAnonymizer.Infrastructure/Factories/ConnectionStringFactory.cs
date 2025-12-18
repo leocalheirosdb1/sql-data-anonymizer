@@ -19,7 +19,6 @@ public sealed class ConnectionStringFactory
             DatabaseType.SqlServer => CreateSqlServer(server, database),
             DatabaseType.Oracle => CreateOracle(server, database),
             DatabaseType.MySql => CreateMySql(server, database),
-            DatabaseType.PostgreSql => CreatePostgreSql(server, database),
             _ => throw new NotSupportedException($"Database type {dbType} is not supported")
         };
     }

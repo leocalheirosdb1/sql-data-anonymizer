@@ -5,9 +5,6 @@ using SqlDataAnonymizer.Domain.Interfaces;
 
 namespace SqlDataAnonymizer.Infrastructure.Database;
 
-/// <summary>
-/// Implementação concreta do wrapper usando DbConnection do ADO.NET
-/// </summary>
 public sealed class DbConnectionWrapper : IDbConnectionWrapper
 {
     private readonly DbConnection _connection;

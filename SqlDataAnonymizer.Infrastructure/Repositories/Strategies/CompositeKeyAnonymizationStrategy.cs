@@ -6,9 +6,6 @@ using SqlDataAnonymizer.Infrastructure.Repositories.Models;
 
 namespace SqlDataAnonymizer.Infrastructure.Repositories.Strategies;
 
-/// <summary>
-/// Estratégia otimizada para tabelas com chaves primárias compostas (2+ colunas)
-/// </summary>
 internal sealed class CompositeKeyAnonymizationStrategy : ITableAnonymizationStrategy
 {
     private readonly DatabaseSettings _settings;
@@ -31,35 +28,14 @@ internal sealed class CompositeKeyAnonymizationStrategy : ITableAnonymizationStr
         var primaryKeys = await GetPrimaryKeysAsync(connection, provider, column);
         
         _logger.LogInformation(
-            "Usando estratégia de chave composta para {Table}.{Column} com {KeyCount} colunas na PK: {Keys}",
-            column.FullTableName(), column.ColumnName, primaryKeys.Count, string.Join(", ", primaryKeys));
+            "Iniciando anonimização com chave composta ({KeyCount} colunas) de {Table}.{Column} - PKs: {Keys} (temp table + batch insert)",
+            primaryKeys.Count, column.FullTableName(), column.ColumnName, string.Join(", ", primaryKeys));
 
-        await using var transaction = await connection.BeginTransactionAsync();
+        await ProcessAllBatchesAsync(connection, provider, column, strategy, primaryKeys, totalRows, logCallback);
 
-        try
-        {
-            LogStart(column, _settings.BatchSize, primaryKeys.Count);
-
-            var context = new BatchProcessingContext(
-                connection,
-                provider,
-                column,
-                strategy,
-                transaction,
-                totalRows,
-                _settings.BatchSize,
-                logCallback);
-
-            await ProcessAllBatchesAsync(context, primaryKeys);
-
-            await transaction.CommitAsync();
-            LogSuccess(column, logCallback);
-        }
-        catch (Exception ex)
-        {
-            await HandleErrorAsync(transaction, column, ex);
-            throw;
-        }
+        logCallback($"Concluído (chave composta): {column.FullTableName()}.{column.ColumnName}");
+        _logger.LogInformation("Anonimização com chave composta concluída para {Table}.{Column}", 
+            column.FullTableName(), column.ColumnName);
     }
 
     private static async Task<List<string>> GetPrimaryKeysAsync(
@@ -68,35 +44,84 @@ internal sealed class CompositeKeyAnonymizationStrategy : ITableAnonymizationStr
         SensitiveColumnDto column)
     {
         var query = provider.GetPrimaryKeysQuery();
-        var keys = await connection.QueryAsync<string>(query, new { Schema = column.Schema, TableName = column.TableName });
+        var keys = await connection.QueryAsync<string>(query, new { column.Schema, column.TableName });
         return keys.ToList();
     }
 
-    private async Task ProcessAllBatchesAsync(BatchProcessingContext context, List<string> primaryKeys)
+    private async Task ProcessAllBatchesAsync(
+        IDbConnectionWrapper connection,
+        IDatabaseProvider provider,
+        SensitiveColumnDto column,
+        IAnonymizationStrategy strategy,
+        List<string> primaryKeys,
+        long totalRows,
+        Action<string> logCallback)
     {
         var offset = 0;
         var processedRows = 0;
+        var failedBatches = new List<int>();
 
-        while (offset < context.TotalRows)
+        while (offset < totalRows)
         {
-            var batch = await FetchBatchAsync(context, primaryKeys, offset);
+            await using var transaction = await connection.BeginTransactionAsync();
             
-            if (batch.IsEmpty)
-                break;
+            try
+            {
+                var batch = await FetchBatchAsync(connection, provider, column, primaryKeys, offset, transaction);
+                
+                if (batch.IsEmpty)
+                    break;
+                
+                var anonymizedValues = BuildAnonymizedValues(batch.Records, column.ColumnName, strategy);
 
-            await ProcessBatchAsync(context, batch, primaryKeys);
+                await provider.BulkUpdateWithTempTableAsync(
+                    connection,
+                    column,
+                    primaryKeys,
+                    batch.Records,
+                    anonymizedValues,
+                    transaction,
+                    commandTimeout: 300);
 
-            processedRows += batch.Count;
-            offset += context.BatchSize;
+                await transaction.CommitAsync();
+                
+                _logger.LogDebug("Batch {BatchNum} com chave composta ({Offset}-{End}) commitado", 
+                    offset / _settings.BatchSize, offset, offset + batch.Count);
 
-            ReportProgress(context.LogCallback, processedRows, context.TotalRows);
+                processedRows += batch.Count;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                failedBatches.Add(offset / _settings.BatchSize);
+                
+                _logger.LogError(ex, "Erro no batch {BatchNum} com chave composta (offset {Offset})", 
+                    offset / _settings.BatchSize, offset);
+            }
+
+            offset += _settings.BatchSize;
+            ReportProgress(logCallback, processedRows, totalRows);
+        }
+
+        if (failedBatches.Count > 0)
+        {
+            _logger.LogWarning("Anonimização com chave composta concluída com {Count} batches falhados: {Batches}", 
+                failedBatches.Count, string.Join(", ", failedBatches));
+            
+            logCallback($"  {failedBatches.Count} batches falharam: {string.Join(", ", failedBatches)}");
         }
     }
 
-    private async Task<BatchData> FetchBatchAsync(BatchProcessingContext context, List<string> primaryKeys, int offset)
+    private async Task<BatchData> FetchBatchAsync(
+        IDbConnectionWrapper connection,
+        IDatabaseProvider provider,
+        SensitiveColumnDto column,
+        List<string> primaryKeys,
+        int offset,
+        IDbTransactionWrapper transaction)
     {
-        var selectSql = context.Provider.BuildSelectQuery(context.Column, primaryKeys, offset, context.BatchSize);
-        var records = await context.Connection.QueryAsync(selectSql, transaction: context.Transaction);
+        var selectSql = provider.BuildSelectQuery(column, primaryKeys, offset, _settings.BatchSize);
+        var records = await connection.QueryAsync(selectSql, transaction: transaction);
         
         var recordsList = records
             .Cast<IDictionary<string, object>>()
@@ -105,38 +130,9 @@ internal sealed class CompositeKeyAnonymizationStrategy : ITableAnonymizationStr
         return new BatchData(recordsList);
     }
 
-    private async Task ProcessBatchAsync(BatchProcessingContext context, BatchData batch, List<string> primaryKeys)
-    {
-        var anonymizedValues = BuildAnonymizedValuesForCompositeKey(
-            batch.Records, 
-            context.Column.ColumnName, 
-            primaryKeys, 
-            context.Strategy);
-
-        if (anonymizedValues.Count == 0)
-            return;
-
-        var updateSql = BuildCompositeKeyUpdateQuery(
-            context.Provider, 
-            context.Column, 
-            primaryKeys, 
-            batch.Records, 
-            anonymizedValues);
-
-        if (string.IsNullOrEmpty(updateSql))
-            return;
-
-        await context.Connection.ExecuteAsync(updateSql, transaction: context.Transaction, commandTimeout: 300);
-        _logger.LogDebug("Lote de {Count} registros com chave composta atualizado", batch.Count);
-    }
-
-    /// <summary>
-    /// Gera valores anonimizados únicos baseados na chave composta
-    /// </summary>
-    private static Dictionary<string, string> BuildAnonymizedValuesForCompositeKey(
+    private static Dictionary<string, string> BuildAnonymizedValues(
         List<IDictionary<string, object>> records,
         string columnName,
-        List<string> primaryKeys,
         IAnonymizationStrategy strategy)
     {
         var result = new Dictionary<string, string>(capacity: records.Count);
@@ -144,112 +140,19 @@ internal sealed class CompositeKeyAnonymizationStrategy : ITableAnonymizationStr
         foreach (var record in records)
         {
             var originalValue = record[columnName]?.ToString();
-            
+    
             if (string.IsNullOrWhiteSpace(originalValue))
                 continue;
-
-            var compositeKey = BuildCompositeKey(record, primaryKeys);
-
-            result[compositeKey] = strategy.Anonymize();
+            
+            result.TryAdd(originalValue, strategy.Anonymize());
         }
 
         return result;
     }
 
-    /// <summary>
-    /// Constrói chave composta concatenando valores das PKs
-    /// </summary>
-    private static string BuildCompositeKey(IDictionary<string, object> record, List<string> primaryKeys)
-    {
-        var keyParts = new List<string>(primaryKeys.Count);
-        
-        foreach (var pk in primaryKeys)
-        {
-            var value = record[pk]?.ToString() ?? "NULL";
-            keyParts.Add(value);
-        }
-
-        return string.Join("|", keyParts);
-    }
-
-    /// <summary>
-    /// Constrói query UPDATE otimizada para chaves compostas
-    /// </summary>
-    private static string BuildCompositeKeyUpdateQuery(
-        IDatabaseProvider provider,
-        SensitiveColumnDto column,
-        List<string> primaryKeys,
-        List<IDictionary<string, object>> records,
-        Dictionary<string, string> anonymizedValues)
-    {
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"UPDATE {column.FullTableName()}");
-        sb.AppendLine($"SET {provider.QuoteIdentifier(column.ColumnName)} = CASE");
-
-        var hasValidRecords = false;
-        var whereConditions = new List<string>();
-
-        foreach (var record in records)
-        {
-            var originalValue = record[column.ColumnName]?.ToString();
-            if (string.IsNullOrWhiteSpace(originalValue))
-                continue;
-
-            var compositeKey = BuildCompositeKey(record, primaryKeys);
-            
-            if (!anonymizedValues.TryGetValue(compositeKey, out var anonymizedValue))
-                continue;
-
-            hasValidRecords = true;
-
-            var whenConditions = primaryKeys
-                .Select(pk => $"{provider.QuoteIdentifier(pk)} = '{provider.EscapeString(record[pk]?.ToString() ?? "")}'")
-                .ToList();
-
-            var whenClause = string.Join(" AND ", whenConditions);
-            sb.AppendLine($"    WHEN {whenClause} THEN '{provider.EscapeString(anonymizedValue)}'");
-
-            var pkConditions = primaryKeys
-                .Select(pk => $"{provider.QuoteIdentifier(pk)} = '{provider.EscapeString(record[pk]?.ToString() ?? "")}'")
-                .ToList();
-            
-            whereConditions.Add($"({string.Join(" AND ", pkConditions)})");
-        }
-
-        if (!hasValidRecords)
-            return string.Empty;
-
-        sb.AppendLine($"    ELSE {provider.QuoteIdentifier(column.ColumnName)}");
-        sb.AppendLine("END");
-        sb.AppendLine($"WHERE {string.Join(" OR ", whereConditions)}");
-
-        return sb.ToString();
-    }
-
     private static void ReportProgress(Action<string> logCallback, int processedRows, long totalRows)
     {
         var percent = Math.Round((double)processedRows / totalRows * 100, 2);
-        logCallback($"  Progresso: {processedRows:N0}/{totalRows:N0} ({percent}%)");
-    }
-
-    private void LogStart(SensitiveColumnDto column, int batchSize, int keyCount)
-    {
-        _logger.LogInformation(
-            "Iniciando anonimização com chave composta ({KeyCount} colunas) de {Table}.{Column} com {BatchSize} registros por lote",
-            keyCount, column.FullTableName(), column.ColumnName, batchSize);
-    }
-
-    private void LogSuccess(SensitiveColumnDto column, Action<string> logCallback)
-    {
-        logCallback($"  ✅ Concluído (chave composta): {column.FullTableName()}.{column.ColumnName}");
-        _logger.LogInformation("Anonimização com chave composta concluída para {Table}.{Column}", 
-            column.FullTableName(), column.ColumnName);
-    }
-
-    private async Task HandleErrorAsync(IDbTransactionWrapper transaction, SensitiveColumnDto column, Exception ex)
-    {
-        _logger.LogError(ex, "Erro durante anonimização com chave composta de {Table}.{Column}",
-            column.FullTableName(), column.ColumnName);
-        await transaction.RollbackAsync();
+        logCallback($"Progresso: {processedRows:N0}/{totalRows:N0} ({percent}%)");
     }
 }

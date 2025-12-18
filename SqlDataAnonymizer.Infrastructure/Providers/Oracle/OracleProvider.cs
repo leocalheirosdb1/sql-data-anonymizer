@@ -3,9 +3,10 @@ using System.Text;
 using Oracle.ManagedDataAccess.Client;
 using SqlDataAnonymizer.Domain.DTO;
 using SqlDataAnonymizer.Domain.Enums;
+using SqlDataAnonymizer.Domain.Interfaces;
 using SqlDataAnonymizer.Infrastructure.Common;
 
-namespace SqlDataAnonymizer.Infrastructure.Database.Oracle;
+namespace SqlDataAnonymizer.Infrastructure.Providers.Oracle;
 
 public sealed class OracleProvider : BaseDatabaseProvider
 {
@@ -18,53 +19,53 @@ public sealed class OracleProvider : BaseDatabaseProvider
 
     public override string GetSensitiveColumnsQuery()
     {
-        return @"
-            SELECT 
-                atc.OWNER as Schema,
-                atc.TABLE_NAME as TableName,
-                atc.COLUMN_NAME as ColumnName,
-                atc.DATA_TYPE as DataType,
-                CASE
-                    WHEN UPPER(atc.COLUMN_NAME) LIKE '%EMAIL%' THEN 'email'
-                    WHEN UPPER(atc.COLUMN_NAME) LIKE '%CPF%' THEN 'cpf'
-                    WHEN UPPER(atc.COLUMN_NAME) LIKE '%TELEFONE%' THEN 'telefone'
-                    ELSE 'desconhecido'
-                END AS SensitiveType
-            FROM ALL_TAB_COLUMNS atc
-            INNER JOIN ALL_TABLES at ON atc.OWNER = at.OWNER AND atc.TABLE_NAME = at.TABLE_NAME
-            WHERE atc.OWNER NOT IN ('SYS', 'SYSTEM', 'OUTLN', 'DBSNMP', 'WMSYS', 'XDB', 'CTXSYS', 'MDSYS', 'OLAPSYS', 'ORDSYS')
-                AND (
-                    UPPER(atc.COLUMN_NAME) LIKE '%EMAIL%'
-                    OR UPPER(atc.COLUMN_NAME) LIKE '%CPF%'
-                    OR UPPER(atc.COLUMN_NAME) LIKE '%TELEFONE%'
-                )
-            ORDER BY atc.TABLE_NAME, atc.COLUMN_NAME";
+        return """
+
+                           SELECT 
+                               atc.OWNER as Schema,
+                               atc.TABLE_NAME as TableName,
+                               atc.COLUMN_NAME as ColumnName,
+                               atc.DATA_TYPE as DataType,
+                               CASE
+                                   WHEN UPPER(atc.COLUMN_NAME) LIKE '%EMAIL%' THEN 'email'
+                                   WHEN UPPER(atc.COLUMN_NAME) LIKE '%CPF%' THEN 'cpf'
+                                   WHEN UPPER(atc.COLUMN_NAME) LIKE '%TELEFONE%' THEN 'telefone'
+                                   ELSE 'desconhecido'
+                               END AS SensitiveType
+                           FROM ALL_TAB_COLUMNS atc
+                           INNER JOIN ALL_TABLES at ON atc.OWNER = at.OWNER AND atc.TABLE_NAME = at.TABLE_NAME
+                           WHERE atc.OWNER NOT IN ('SYS', 'SYSTEM', 'OUTLN', 'DBSNMP', 'WMSYS', 'XDB', 'CTXSYS', 'MDSYS', 'OLAPSYS', 'ORDSYS')
+                               AND (
+                                   UPPER(atc.COLUMN_NAME) LIKE '%EMAIL%'
+                                   OR UPPER(atc.COLUMN_NAME) LIKE '%CPF%'
+                                   OR UPPER(atc.COLUMN_NAME) LIKE '%TELEFONE%'
+                               )
+                           ORDER BY atc.TABLE_NAME, atc.COLUMN_NAME
+               """;
     }
 
     public override string GetPrimaryKeysQuery()
     {
-        return @"
-            SELECT acc.COLUMN_NAME
-            FROM ALL_CONSTRAINTS ac
-            INNER JOIN ALL_CONS_COLUMNS acc 
-                ON ac.OWNER = acc.OWNER 
-                AND ac.CONSTRAINT_NAME = acc.CONSTRAINT_NAME
-            WHERE ac.CONSTRAINT_TYPE = 'P'
-                AND ac.OWNER = :Schema
-                AND ac.TABLE_NAME = :TableName
-            ORDER BY acc.POSITION";
+        return """
+
+                           SELECT acc.COLUMN_NAME
+                           FROM ALL_CONSTRAINTS ac
+                           INNER JOIN ALL_CONS_COLUMNS acc 
+                               ON ac.OWNER = acc.OWNER 
+                               AND ac.CONSTRAINT_NAME = acc.CONSTRAINT_NAME
+                           WHERE ac.CONSTRAINT_TYPE = 'P'
+                               AND ac.OWNER = :Schema
+                               AND ac.TABLE_NAME = :TableName
+                           ORDER BY acc.POSITION
+               """;
     }
 
     public override string GetTableRowCountQuery(SensitiveColumnDto column)
     {
         return $"SELECT COUNT(*) FROM {column.FullTableName("\"")}";
     }
-    
-    public override string BuildSelectQuery(
-        SensitiveColumnDto column,
-        List<string> primaryKeys,
-        int offset,
-        int batchSize)
+
+    public override string BuildSelectQuery(SensitiveColumnDto column, List<string> primaryKeys, int offset, int batchSize)
     {
         var pkColumns = string.Join(", ", primaryKeys.Select(pk => QuoteIdentifier(pk)));
         var columnQuoted = QuoteIdentifier(column.ColumnName);
@@ -75,12 +76,8 @@ public sealed class OracleProvider : BaseDatabaseProvider
                $"FROM {column.FullTableName("\"")}) " +
                $"WHERE rn > {offset} AND rn <= {offset + batchSize}";
     }
-    
-    public override string BuildSelectWithTempColumnQuery(
-        SensitiveColumnDto column,
-        string tempColumnName,
-        long offset,
-        int batchSize)
+
+    public override string BuildSelectWithTempColumnQuery(SensitiveColumnDto column, string tempColumnName, long offset, int batchSize)
     {
         var tempColQuoted = QuoteIdentifier(tempColumnName);
         var columnQuoted = QuoteIdentifier(column.ColumnName);
@@ -89,53 +86,6 @@ public sealed class OracleProvider : BaseDatabaseProvider
                $"FROM {column.FullTableName("\"")} " +
                $"WHERE {tempColQuoted} BETWEEN {offset} AND {offset + batchSize - 1} " +
                $"AND {columnQuoted} IS NOT NULL";
-    }
-
-    public override string BuildBulkUpdateQuery(
-        SensitiveColumnDto column,
-        List<string> primaryKeys,
-        List<IDictionary<string, object>> records,
-        Dictionary<string, string> anonymizedValues)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine($"UPDATE {column.FullTableName("\"")}");
-        sb.AppendLine($"SET \"{column.ColumnName}\" = CASE");
-
-        var hasValidRecords = false;
-        var whereConditions = new List<string>();
-
-        foreach (var record in records)
-        {
-            var originalValue = record[column.ColumnName]?.ToString();
-            if (string.IsNullOrWhiteSpace(originalValue))
-                continue;
-
-            if (!anonymizedValues.TryGetValue(originalValue, out var anonymizedValue))
-                continue;
-
-            hasValidRecords = true;
-
-            var whenConditions = primaryKeys
-                .Select(pk => $"\"{pk}\" = '{EscapeString(record[pk]?.ToString() ?? "")}'")
-                .ToList();
-
-            var whenClause = string.Join(" AND ", whenConditions);
-            sb.AppendLine($"    WHEN {whenClause} THEN '{EscapeString(anonymizedValue)}'");
-
-            var pkConditions = primaryKeys
-                .Select(pk => $"\"{pk}\" = '{EscapeString(record[pk]?.ToString() ?? "")}'")
-                .ToList();
-            whereConditions.Add($"({string.Join(" AND ", pkConditions)})");
-        }
-
-        if (!hasValidRecords)
-            return string.Empty;
-
-        sb.AppendLine($"    ELSE \"{column.ColumnName}\"");
-        sb.AppendLine("END");
-        sb.AppendLine($"WHERE {string.Join(" OR ", whereConditions)}");
-
-        return sb.ToString();
     }
 
     public override string GetAddTempColumnQuery(SensitiveColumnDto column, string tempColumnName)
@@ -150,51 +100,77 @@ public sealed class OracleProvider : BaseDatabaseProvider
     {
         var sequenceName = $"SEQ_{tempColumnName}";
         return $@"
-            ALTER TABLE {column.FullTableName("\"")} DROP COLUMN ""{tempColumnName}"",
+            ALTER TABLE {column.FullTableName("\"")} DROP COLUMN ""{tempColumnName}"";
             DROP SEQUENCE {sequenceName};";
-    }
-
-    public override string BuildBulkUpdateWithTempColumnQuery(
-        SensitiveColumnDto column,
-        string tempColumnName,
-        List<IDictionary<string, object>> records,
-        Dictionary<string, string> anonymizedValues)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine($"UPDATE {column.FullTableName("\"")}");
-        sb.AppendLine($"SET \"{column.ColumnName}\" = CASE");
-
-        var hasValidRecords = false;
-        var rowNumbers = new List<string>();
-
-        foreach (var record in records)
-        {
-            var rowNum = record[tempColumnName]?.ToString();
-            var originalValue = record[column.ColumnName]?.ToString();
-
-            if (string.IsNullOrWhiteSpace(originalValue))
-                continue;
-
-            if (!anonymizedValues.TryGetValue(originalValue, out var anonymizedValue))
-                continue;
-
-            hasValidRecords = true;
-            sb.AppendLine($"    WHEN \"{tempColumnName}\" = {rowNum} THEN '{EscapeString(anonymizedValue)}'");
-            rowNumbers.Add(rowNum!);
-        }
-
-        if (!hasValidRecords)
-            return string.Empty;
-
-        sb.AppendLine($"    ELSE \"{column.ColumnName}\"");
-        sb.AppendLine("END");
-        sb.AppendLine($"WHERE \"{tempColumnName}\" IN ({string.Join(", ", rowNumbers)})");
-
-        return sb.ToString();
     }
 
     public override string QuoteIdentifier(string identifier)
     {
         return $"\"{identifier}\"";
+    }
+
+    protected override string GenerateTempTableName()
+    {
+        var guid = Guid.NewGuid().ToString("N").Substring(0, 18);
+        return $"GTT_ANON_{guid}";
+    }
+
+    protected override string BuildCreateTempTableQuery(string tempTableName, List<string> primaryKeys)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"CREATE GLOBAL TEMPORARY TABLE {tempTableName} (");
+
+        var pkDefinitions = primaryKeys.Select(pk => $"    \"{pk}\" VARCHAR2(255) NOT NULL");
+        sb.AppendLine(string.Join(",\n", pkDefinitions) + ",");
+
+        sb.AppendLine("    \"AnonymizedValue\" CLOB NOT NULL,");
+
+        var pkList = string.Join(", ", primaryKeys.Select(pk => $"\"{pk}\""));
+        sb.AppendLine($"    CONSTRAINT PK_{tempTableName.Replace("GTT_ANON_", "PK_")} PRIMARY KEY ({pkList})");
+
+        sb.AppendLine(") ON COMMIT PRESERVE ROWS");
+
+        return sb.ToString();
+    }
+
+    protected override string BuildBatchInsertQuery(string tempTableName, List<string> primaryKeys, List<AnonymizationRow> rows)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("INSERT ALL");
+
+        foreach (var row in rows)
+        {
+            var pkValues = primaryKeys.Select(pk => $"'{EscapeString(row.PrimaryKeyValues[pk])}'");
+            var anonymized = $"'{EscapeString(row.AnonymizedValue)}'";
+
+            sb.AppendLine($"    INTO {tempTableName} ({string.Join(", ", primaryKeys.Select(pk => $"\"{pk}\""))}, \"AnonymizedValue\")");
+            sb.AppendLine($"    VALUES ({string.Join(", ", pkValues)}, {anonymized})");
+        }
+
+        sb.AppendLine("SELECT 1 FROM DUAL");
+
+        return sb.ToString();
+    }
+
+    protected override string BuildUpdateFromTempTableQuery(string tempTableName, SensitiveColumnDto column, List<string> primaryKeys)
+    {
+        var sb = new StringBuilder();
+
+        sb.AppendLine($"MERGE INTO {column.FullTableName("\"")} t");
+        sb.AppendLine($"USING {tempTableName} temp");
+
+        var joinConditions = primaryKeys.Select(pk => $"    t.\"{pk}\" = temp.\"{pk}\"");
+        sb.AppendLine($"ON ({string.Join("\n   AND ", joinConditions)})");
+
+        sb.AppendLine("WHEN MATCHED THEN");
+        sb.AppendLine($"    UPDATE SET t.\"{column.ColumnName}\" = temp.\"AnonymizedValue\"");
+
+        return sb.ToString();
+    }
+
+    protected override async Task DropTempTableSafelyAsync(IDbConnectionWrapper connection, string tempTableName, IDbTransactionWrapper transaction)
+    {
+        var deleteSql = $"DELETE FROM {tempTableName}";
+        await connection.ExecuteAsync(deleteSql, transaction: transaction, commandTimeout: 60);
     }
 }

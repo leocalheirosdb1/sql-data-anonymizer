@@ -6,9 +6,6 @@ using SqlDataAnonymizer.Infrastructure.Repositories.Models;
 
 namespace SqlDataAnonymizer.Infrastructure.Repositories.Strategies;
 
-/// <summary>
-/// Estratégia de anonimização para tabelas com chave primária
-/// </summary>
 internal sealed class PrimaryKeyAnonymizationStrategy : ITableAnonymizationStrategy
 {
     private readonly DatabaseSettings _settings;
@@ -29,33 +26,16 @@ internal sealed class PrimaryKeyAnonymizationStrategy : ITableAnonymizationStrat
         Action<string> logCallback)
     {
         var primaryKeys = await GetPrimaryKeysAsync(connection, provider, column);
-        
-        await using var transaction = await connection.BeginTransactionAsync();
 
-        try
-        {
-            LogStart(column, _settings.BatchSize);
+        _logger.LogInformation(
+            "Iniciando anonimização de {Table}.{Column} com {BatchSize} registros por lote (temp table + batch insert)",
+            column.FullTableName(), column.ColumnName, _settings.BatchSize);
 
-            var context = new BatchProcessingContext(
-                connection,
-                provider,
-                column,
-                strategy,
-                transaction,
-                totalRows,
-                _settings.BatchSize,
-                logCallback);
+        await ProcessAllBatchesAsync(connection, provider, column, strategy, primaryKeys, totalRows, logCallback);
 
-            await ProcessAllBatchesAsync(context, primaryKeys);
-
-            await transaction.CommitAsync();
-            LogSuccess(column, logCallback);
-        }
-        catch (Exception ex)
-        {
-            await HandleErrorAsync(transaction, column, ex);
-            throw;
-        }
+        logCallback($"Concluído: {column.FullTableName()}.{column.ColumnName}");
+        _logger.LogInformation("Anonimização concluída para {Table}.{Column}",
+            column.FullTableName(), column.ColumnName);
     }
 
     private static async Task<List<string>> GetPrimaryKeysAsync(
@@ -64,57 +44,90 @@ internal sealed class PrimaryKeyAnonymizationStrategy : ITableAnonymizationStrat
         SensitiveColumnDto column)
     {
         var query = provider.GetPrimaryKeysQuery();
-        var keys = await connection.QueryAsync<string>(query, new { Schema = column.Schema, TableName = column.TableName });
+        var keys = await connection.QueryAsync<string>(query, new { column.Schema, column.TableName });
         return keys.ToList();
     }
 
-    private async Task ProcessAllBatchesAsync(BatchProcessingContext context, List<string> primaryKeys)
+    private async Task ProcessAllBatchesAsync(
+        IDbConnectionWrapper connection,
+        IDatabaseProvider provider,
+        SensitiveColumnDto column,
+        IAnonymizationStrategy strategy,
+        List<string> primaryKeys,
+        long totalRows,
+        Action<string> logCallback)
     {
         var offset = 0;
         var processedRows = 0;
+        var failedBatches = new List<int>();
 
-        while (offset < context.TotalRows)
+        while (offset < totalRows)
         {
-            var batch = await FetchBatchAsync(context, primaryKeys, offset);
-            
-            if (batch.IsEmpty)
-                break;
+            await using var transaction = await connection.BeginTransactionAsync();
 
-            await ProcessBatchAsync(context, batch, primaryKeys);
+            try
+            {
+                var batch = await FetchBatchAsync(connection, provider, column, primaryKeys, offset, transaction);
 
-            processedRows += batch.Count;
-            offset += context.BatchSize;
+                if (batch.IsEmpty)
+                    break;
 
-            ReportProgress(context.LogCallback, processedRows, context.TotalRows);
+                var anonymizedValues = BuildAnonymizedValues(batch.Records, column.ColumnName, strategy);
+
+                await provider.BulkUpdateWithTempTableAsync(
+                    connection,
+                    column,
+                    primaryKeys,
+                    batch.Records,
+                    anonymizedValues,
+                    transaction,
+                    commandTimeout: 300);
+
+                await transaction.CommitAsync();
+
+                _logger.LogDebug("Batch {BatchNum} ({Offset}-{End}) commitado com sucesso",
+                    offset / _settings.BatchSize, offset, offset + batch.Count);
+
+                processedRows += batch.Count;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                failedBatches.Add(offset / _settings.BatchSize);
+
+                _logger.LogError(ex, "Erro no batch {BatchNum} (offset {Offset})",
+                    offset / _settings.BatchSize, offset);
+            }
+
+            offset += _settings.BatchSize;
+            ReportProgress(logCallback, processedRows, totalRows);
+        }
+
+        if (failedBatches.Any())
+        {
+            _logger.LogWarning("Anonimização concluída com {Count} batches falhados: {Batches}",
+                failedBatches.Count, string.Join(", ", failedBatches));
+
+            logCallback($" {failedBatches.Count} batches falharam: {string.Join(", ", failedBatches)}");
         }
     }
 
-    private async Task<BatchData> FetchBatchAsync(BatchProcessingContext context, List<string> primaryKeys, int offset)
+    private async Task<BatchData> FetchBatchAsync(
+        IDbConnectionWrapper connection,
+        IDatabaseProvider provider,
+        SensitiveColumnDto column,
+        List<string> primaryKeys,
+        int offset,
+        IDbTransactionWrapper transaction)
     {
-        var selectSql = context.Provider.BuildSelectQuery(context.Column, primaryKeys, offset, context.BatchSize);
-        var records = await context.Connection.QueryAsync(selectSql, transaction: context.Transaction);
-        
+        var selectSql = provider.BuildSelectQuery(column, primaryKeys, offset, _settings.BatchSize);
+        var records = await connection.QueryAsync(selectSql, transaction: transaction);
+
         var recordsList = records
             .Cast<IDictionary<string, object>>()
             .ToList();
 
         return new BatchData(recordsList);
-    }
-
-    private async Task ProcessBatchAsync(BatchProcessingContext context, BatchData batch, List<string> primaryKeys)
-    {
-        var anonymizedValues = BuildAnonymizedValues(batch.Records, context.Column.ColumnName, context.Strategy);
-
-        if (anonymizedValues.Count == 0)
-            return;
-
-        var updateSql = context.Provider.BuildBulkUpdateQuery(context.Column, primaryKeys, batch.Records, anonymizedValues);
-
-        if (string.IsNullOrEmpty(updateSql))
-            return;
-
-        await context.Connection.ExecuteAsync(updateSql, transaction: context.Transaction, commandTimeout: 300);
-        _logger.LogDebug("Lote de {Count} registros atualizado", batch.Count);
     }
 
     private static Dictionary<string, string> BuildAnonymizedValues(
@@ -127,7 +140,7 @@ internal sealed class PrimaryKeyAnonymizationStrategy : ITableAnonymizationStrat
         foreach (var record in records)
         {
             var originalValue = record[columnName]?.ToString();
-            
+
             if (string.IsNullOrWhiteSpace(originalValue))
                 continue;
 
@@ -140,27 +153,6 @@ internal sealed class PrimaryKeyAnonymizationStrategy : ITableAnonymizationStrat
     private static void ReportProgress(Action<string> logCallback, int processedRows, long totalRows)
     {
         var percent = Math.Round((double)processedRows / totalRows * 100, 2);
-        logCallback($"  Progresso: {processedRows:N0}/{totalRows:N0} ({percent}%)");
-    }
-
-    private void LogStart(SensitiveColumnDto column, int batchSize)
-    {
-        _logger.LogInformation(
-            "Iniciando anonimização de {Table}.{Column} com {BatchSize} registros por lote (com transação)",
-            column.FullTableName(), column.ColumnName, batchSize);
-    }
-
-    private void LogSuccess(SensitiveColumnDto column, Action<string> logCallback)
-    {
-        logCallback($"  ✅ Concluído: {column.FullTableName()}.{column.ColumnName}");
-        _logger.LogInformation("Anonimização concluída para {Table}.{Column} (transação commitada)", 
-            column.FullTableName(), column.ColumnName);
-    }
-
-    private async Task HandleErrorAsync(IDbTransactionWrapper transaction, SensitiveColumnDto column, Exception ex)
-    {
-        _logger.LogError(ex, "Erro durante anonimização de {Table}.{Column} - transação será revertida",
-            column.FullTableName(), column.ColumnName);
-        await transaction.RollbackAsync();
+        logCallback($"Progresso: {processedRows:N0}/{totalRows:N0} ({percent}%)");
     }
 }

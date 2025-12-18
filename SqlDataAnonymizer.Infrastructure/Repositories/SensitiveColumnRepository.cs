@@ -1,5 +1,4 @@
-﻿using Dapper;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using SqlDataAnonymizer.Domain.DTO;
 using SqlDataAnonymizer.Domain.Interfaces;
 
