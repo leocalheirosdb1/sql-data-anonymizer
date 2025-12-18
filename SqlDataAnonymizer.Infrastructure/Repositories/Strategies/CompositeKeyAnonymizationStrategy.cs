@@ -1,8 +1,8 @@
 ﻿using Microsoft.Extensions.Logging;
 using SqlDataAnonymizer.Domain.DTO;
 using SqlDataAnonymizer.Domain.Interfaces;
+using SqlDataAnonymizer.Domain.Models;
 using SqlDataAnonymizer.Infrastructure.Configuration;
-using SqlDataAnonymizer.Infrastructure.Repositories.Models;
 
 namespace SqlDataAnonymizer.Infrastructure.Repositories.Strategies;
 

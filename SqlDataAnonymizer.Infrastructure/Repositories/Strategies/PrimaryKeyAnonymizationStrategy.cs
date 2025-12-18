@@ -1,8 +1,8 @@
 ﻿using Microsoft.Extensions.Logging;
 using SqlDataAnonymizer.Domain.DTO;
 using SqlDataAnonymizer.Domain.Interfaces;
+using SqlDataAnonymizer.Domain.Models;
 using SqlDataAnonymizer.Infrastructure.Configuration;
-using SqlDataAnonymizer.Infrastructure.Repositories.Models;
 
 namespace SqlDataAnonymizer.Infrastructure.Repositories.Strategies;
 
@@ -103,7 +103,7 @@ internal sealed class PrimaryKeyAnonymizationStrategy : ITableAnonymizationStrat
             ReportProgress(logCallback, processedRows, totalRows);
         }
 
-        if (failedBatches.Any())
+        if (failedBatches.Count > 0)
         {
             _logger.LogWarning("Anonimização concluída com {Count} batches falhados: {Batches}",
                 failedBatches.Count, string.Join(", ", failedBatches));
@@ -135,16 +135,24 @@ internal sealed class PrimaryKeyAnonymizationStrategy : ITableAnonymizationStrat
         string columnName,
         IAnonymizationStrategy strategy)
     {
-        var result = new Dictionary<string, string>(capacity: records.Count);
+        var uniqueValues = new HashSet<string>(capacity: records.Count);
 
         foreach (var record in records)
         {
-            var originalValue = record[columnName]?.ToString();
-
-            if (string.IsNullOrWhiteSpace(originalValue))
+            if (!record.TryGetValue(columnName, out var value))
                 continue;
 
-            result.TryAdd(originalValue, strategy.Anonymize());
+            var stringValue = value as string ?? value.ToString();
+
+            if (!string.IsNullOrWhiteSpace(stringValue))
+                uniqueValues.Add(stringValue);
+        }
+
+        var result = new Dictionary<string, string>(capacity: uniqueValues.Count);
+    
+        foreach (var originalValue in uniqueValues)
+        {
+            result[originalValue] = strategy.Anonymize();
         }
 
         return result;

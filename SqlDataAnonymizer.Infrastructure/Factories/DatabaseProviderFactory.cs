@@ -3,6 +3,7 @@ using SqlDataAnonymizer.Domain.Interfaces;
 using SqlDataAnonymizer.Infrastructure.Database;
 using SqlDataAnonymizer.Infrastructure.Providers.Mysql;
 using SqlDataAnonymizer.Infrastructure.Providers.Oracle;
+using SqlDataAnonymizer.Infrastructure.Providers.SqlServer;
 
 namespace SqlDataAnonymizer.Infrastructure.Factories;
 

@@ -4,6 +4,7 @@ using SqlDataAnonymizer.Domain.Enums;
 using SqlDataAnonymizer.Domain.Interfaces;
 using SqlDataAnonymizer.Infrastructure.Factories;
 using System.Threading.Channels;
+using SqlDataAnonymizer.Domain.Models;
 
 namespace SqlDataAnonymizer.Application.Services;
 
@@ -15,7 +16,7 @@ public sealed class AnonymizationService : IAnonymizationService
     private readonly IEnumerable<IAnonymizationStrategy> _strategies;
     private readonly ConnectionStringFactory _connectionStringFactory;
     private readonly DatabaseProviderFactory _providerFactory;
-    private readonly Channel<AnonymizationJobDto> _jobQueue;
+    private readonly Channel<AnonymizationJobModel> _jobQueue;
     private readonly ILogger<AnonymizationService> _logger;
 
     public AnonymizationService(
@@ -25,7 +26,7 @@ public sealed class AnonymizationService : IAnonymizationService
         IEnumerable<IAnonymizationStrategy> strategies,
         ConnectionStringFactory connectionStringFactory,
         DatabaseProviderFactory providerFactory,
-        Channel<AnonymizationJobDto> jobQueue,
+        Channel<AnonymizationJobModel> jobQueue,
         ILogger<AnonymizationService> logger)
     {
         _columnRepository = columnRepository;
@@ -43,22 +44,22 @@ public sealed class AnonymizationService : IAnonymizationService
         var job = CreateJob(server, database, dbType);
         _jobRepository.Add(job);
 
-        _logger.LogInformation("📋 Anonimização enfileirada - JobId: {JobId}, Server: {Server}, Database: {Database}, Type: {Type}", 
+        _logger.LogInformation("Anonimização enfileirada - JobId: {JobId}, Server: {Server}, Database: {Database}, Type: {Type}", 
             job.JobId, server, database, dbType);
         
         await _jobQueue.Writer.WriteAsync(job);
         
-        _logger.LogInformation("✅ Job {JobId} enfileirado com sucesso", job.JobId);
+        _logger.LogInformation("Job {JobId} enfileirado com sucesso", job.JobId);
 
         return job.JobId;
     }
 
-    public AnonymizationJobDto? GetJobStatus(Guid jobId)
+    public AnonymizationJobModel? GetJobStatus(Guid jobId)
     {
         return _jobRepository.GetById(jobId);
     }
 
-    public async Task ProcessJobAsync(AnonymizationJobDto job)
+    public async Task ProcessJobAsync(AnonymizationJobModel job)
     {
         try
         {
@@ -91,9 +92,9 @@ public sealed class AnonymizationService : IAnonymizationService
         }
     }
 
-    private AnonymizationJobDto CreateJob(string server, string database, DatabaseType dbType)
+    private AnonymizationJobModel CreateJob(string server, string database, DatabaseType dbType)
     {
-        return new AnonymizationJobDto
+        return new AnonymizationJobModel
         {
             JobId = Guid.NewGuid(),
             Server = server,
@@ -105,7 +106,7 @@ public sealed class AnonymizationService : IAnonymizationService
     }
 
     private async Task ProcessColumnsAsync(
-        AnonymizationJobDto job,
+        AnonymizationJobModel job,
         string connectionString,
         IDatabaseProvider provider,
         List<SensitiveColumnDto> columns)
@@ -140,7 +141,7 @@ public sealed class AnonymizationService : IAnonymizationService
         return _strategies.FirstOrDefault(s => s.Type.Equals(type, StringComparison.OrdinalIgnoreCase));
     }
 
-    private void UpdateJobStatus(AnonymizationJobDto job, string status, string message)
+    private void UpdateJobStatus(AnonymizationJobModel job, string status, string message)
     {
         job.Status = status;
 
@@ -153,7 +154,7 @@ public sealed class AnonymizationService : IAnonymizationService
         _jobRepository.Update(job);
     }
 
-    private void AddLog(AnonymizationJobDto job, string message)
+    private void AddLog(AnonymizationJobModel job, string message)
     {
         var log = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] {message}";
         

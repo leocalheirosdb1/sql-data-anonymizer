@@ -7,6 +7,7 @@ using SqlDataAnonymizer.Infrastructure.Configuration;
 using SqlDataAnonymizer.Infrastructure.Factories;
 using SqlDataAnonymizer.Infrastructure.Repositories;
 using System.Threading.Channels;
+using SqlDataAnonymizer.Domain.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,18 +19,21 @@ var dbSettings = builder.Configuration
     .GetSection("DatabaseSettings")
     .Get<DatabaseSettings>() ?? new DatabaseSettings();
 
+var mongoDbSettings = builder.Configuration
+    .GetSection("MongoDbSettings")
+    .Get<MongoDbSettings>() ?? new MongoDbSettings();
+
 builder.Services.AddSingleton(dbSettings);
+builder.Services.AddSingleton(mongoDbSettings);
 builder.Services.AddSingleton<ConnectionStringFactory>();
 builder.Services.AddSingleton<DatabaseProviderFactory>();
 
-builder.Services.AddSingleton(Channel.CreateUnbounded<AnonymizationJobDto>(new UnboundedChannelOptions
+builder.Services.AddSingleton(Channel.CreateBounded<AnonymizationJobModel>(new BoundedChannelOptions(100)
 {
-    SingleReader = true, 
-    SingleWriter = false
+    FullMode = BoundedChannelFullMode.Wait
 }));
 
-
-builder.Services.AddSingleton<IJobRepository, InMemoryJobRepository>();
+builder.Services.AddSingleton<IJobRepository, MongoDbJobRepository>();
 builder.Services.AddScoped<ISensitiveColumnRepository, SensitiveColumnRepository>();
 builder.Services.AddScoped<IAnonymizationRepository, AnonymizationRepository>();
 

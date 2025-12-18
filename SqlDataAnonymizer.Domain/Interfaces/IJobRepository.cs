@@ -1,11 +1,12 @@
 ﻿using SqlDataAnonymizer.Domain.DTO;
+using SqlDataAnonymizer.Domain.Models;
 
 namespace SqlDataAnonymizer.Domain.Interfaces;
 
 public interface IJobRepository
 {
-    void Add(AnonymizationJobDto job);
-    AnonymizationJobDto? GetById(Guid jobId);
-    List<AnonymizationJobDto> GetAll();
-    void Update(AnonymizationJobDto job);
+    void Add(AnonymizationJobModel job);
+    AnonymizationJobModel? GetById(Guid jobId);
+    List<AnonymizationJobModel> GetAll();
+    void Update(AnonymizationJobModel job);
 }
