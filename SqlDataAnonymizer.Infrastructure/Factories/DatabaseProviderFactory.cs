@@ -1,8 +1,6 @@
 ﻿using SqlDataAnonymizer.Domain.Enums;
 using SqlDataAnonymizer.Domain.Interfaces;
-using SqlDataAnonymizer.Infrastructure.Database;
 using SqlDataAnonymizer.Infrastructure.Providers.Mysql;
-using SqlDataAnonymizer.Infrastructure.Providers.Oracle;
 using SqlDataAnonymizer.Infrastructure.Providers.SqlServer;
 
 namespace SqlDataAnonymizer.Infrastructure.Factories;
@@ -16,7 +14,6 @@ public sealed class DatabaseProviderFactory
         _providers = new Dictionary<DatabaseType, IDatabaseProvider>
         {
             { DatabaseType.SqlServer, new SqlServerProvider() },
-            { DatabaseType.Oracle, new OracleProvider() },
             { DatabaseType.MySql, new MySqlProvider() }
         };
     }

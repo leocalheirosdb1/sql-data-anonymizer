@@ -95,7 +95,7 @@ app.MapControllers();
 
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 logger.LogInformation("SQL Data Anonymizer API Started");
-logger.LogInformation("Supported Databases: SqlServer, Oracle, MySql, PostgreSql");
+logger.LogInformation("Supported Databases: SqlServer, MySql");
 logger.LogInformation("Environment: {Environment}", app.Environment.EnvironmentName);
 logger.LogInformation("Batch Size: {BatchSize}", dbSettings.BatchSize);
 

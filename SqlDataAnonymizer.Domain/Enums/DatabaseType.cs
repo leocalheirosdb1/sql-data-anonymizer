@@ -3,6 +3,5 @@
 public enum DatabaseType
 {
     SqlServer,
-    Oracle,
     MySql
 }

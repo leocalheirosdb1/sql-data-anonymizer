@@ -31,7 +31,7 @@ db.createCollection('AnonymizationJobs', {
                 },
                 databaseType: {
                     bsonType: 'string',
-                    enum: ['SqlServer', 'MySql', 'Oracle'],
+                    enum: ['SqlServer', 'MySql'],
                     description: 'Tipo do banco de dados'
                 },
                 status: {

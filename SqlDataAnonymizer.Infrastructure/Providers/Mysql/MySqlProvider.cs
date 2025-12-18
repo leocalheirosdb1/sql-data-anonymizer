@@ -122,16 +122,21 @@ public sealed class MySqlProvider : BaseDatabaseProvider
     {
         var sb = new StringBuilder();
         sb.AppendLine($"CREATE TEMPORARY TABLE {tempTableName} (");
-
-        var pkDefinitions = primaryKeys.Select(pk => $"    `{pk}` VARCHAR(255) NOT NULL");
+        
+        sb.AppendLine("    `_temp_id` BIGINT AUTO_INCREMENT PRIMARY KEY,");
+        
+        var pkDefinitions = primaryKeys.Select(pk => $"    `{pk}` TEXT NOT NULL");
         sb.AppendLine(string.Join(",\n", pkDefinitions) + ",");
 
-        sb.AppendLine("    `AnonymizedValue` TEXT NOT NULL,");
-
-        var pkList = string.Join(", ", primaryKeys.Select(pk => $"`{pk}`"));
-        sb.AppendLine($"    PRIMARY KEY ({pkList})");
-
-        sb.AppendLine(") ENGINE=MEMORY");
+        sb.AppendLine("    `AnonymizedValue` TEXT NOT NULL");
+        
+        sb.AppendLine(") ENGINE=InnoDB;");
+        
+        if (primaryKeys.Count > 0)
+        {
+            var indexColumns = string.Join(", ", primaryKeys.Select(pk => $"`{pk}`(255)"));
+            sb.AppendLine($"CREATE INDEX idx_pk_composite ON {tempTableName}({indexColumns});");
+        }
 
         return sb.ToString();
     }
@@ -158,9 +163,9 @@ public sealed class MySqlProvider : BaseDatabaseProvider
     {
         var sb = new StringBuilder();
 
-        sb.AppendLine($"UPDATE {column.FullTableName("`")} t");
+        sb.AppendLine($"UPDATE {column. FullTableName("`")} t");
         sb.AppendLine($"INNER JOIN {tempTableName} temp");
-
+        
         var joinConditions = primaryKeys.Select(pk => $"    t.`{pk}` = temp.`{pk}`");
         sb.AppendLine($"ON {string.Join("\n   AND ", joinConditions)}");
 

@@ -45,7 +45,7 @@ public sealed class AnonymizationController : ControllerBase
                 return BadRequest(new ErrorResponse
                 {
                     Error = $"Tipo de banco '{request.TipoBanco}' não suportado",
-                    SupportedTypes = new[] { nameof(DatabaseType.SqlServer), nameof(DatabaseType.Oracle), nameof(DatabaseType.MySql) }
+                    SupportedTypes = [nameof(DatabaseType.SqlServer), nameof(DatabaseType.MySql)]
                 });
             }
 
@@ -136,7 +136,7 @@ public sealed class AnonymizationController : ControllerBase
             Status = "Healthy",
             Timestamp = DateTime.UtcNow,
             Version = "1.0.0",
-            SupportedDatabases = new[] { nameof(DatabaseType.SqlServer), nameof(DatabaseType.Oracle), nameof(DatabaseType.MySql) }
+            SupportedDatabases = [nameof(DatabaseType.SqlServer), nameof(DatabaseType.MySql)]
         });
     }
 }
